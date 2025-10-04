@@ -14,50 +14,125 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <pwd.h>   // for getpwuid()
+#include <grp.h>   // for getgrgid()
+#include <time.h>  // for ctime()
 
 extern int errno;
+void print_file_details(const char *path, const char *filename)
+{
+    struct stat info;
+    struct passwd *pw;   // to get username
+    struct group  *gr;   // to get group name
+    char timebuf[100];   // for storing time as text
 
-void do_ls(const char *dir);
+    // Step 1: Get file info
+    if (stat(path, &info) == -1)
+    {
+        perror(path);
+        return;
+    }
+
+    // Step 2: Print file type and permissions
+    // first character: file type
+    if (S_ISDIR(info.st_mode))
+        printf("d");
+    else
+        printf("-");
+
+    // owner permissions
+    printf((info.st_mode & S_IRUSR) ? "r" : "-");
+    printf((info.st_mode & S_IWUSR) ? "w" : "-");
+    printf((info.st_mode & S_IXUSR) ? "x" : "-");
+
+    // group permissions
+    printf((info.st_mode & S_IRGRP) ? "r" : "-");
+    printf((info.st_mode & S_IWGRP) ? "w" : "-");
+    printf((info.st_mode & S_IXGRP) ? "x" : "-");
+
+    // others permissions
+    printf((info.st_mode & S_IROTH) ? "r" : "-");
+    printf((info.st_mode & S_IWOTH) ? "w" : "-");
+    printf((info.st_mode & S_IXOTH) ? "x" : "-");
+
+    // Step 3: Number of links
+    printf(" %2ld", info.st_nlink);
+
+    // Step 4: Username and group name
+    pw = getpwuid(info.st_uid);
+    gr = getgrgid(info.st_gid);
+    printf(" %-8s %-8s", pw->pw_name, gr->gr_name);
+
+    // Step 5: File size
+    printf(" %8ld", info.st_size);
+
+    // Step 6: Last modification time
+    // ctime() returns a string with a newline, so remove it
+    strncpy(timebuf, ctime(&info.st_mtime), sizeof(timebuf));
+    timebuf[strlen(timebuf) - 1] = '\0';
+    printf(" %s", timebuf);
+
+    // Step 7: File name
+    printf(" %s\n", filename);
+}
+void do_ls(const char *dir, int long_format);
+
 
 int main(int argc, char const *argv[])
 {
-    if (argc == 1)
+    int long_format = 0;
+    int start_index = 1;
+
+    // check if "-l" was given
+    if (argc > 1 && strcmp(argv[1], "-l") == 0)
     {
-        do_ls(".");
+        long_format = 1;
+        start_index = 2;
+    }
+
+    if (argc == 1 || (argc == 2 && long_format))
+    {
+        do_ls(".", long_format);
     }
     else
     {
-        for (int i = 1; i < argc; i++)
+        for (int i = start_index; i < argc; i++)
         {
-            printf("Directory listing of %s : \n", argv[i]);
-            do_ls(argv[i]);
-	    puts("");
+            printf("\n%s:\n", argv[i]);
+            do_ls(argv[i], long_format);
         }
     }
+
     return 0;
 }
 
-void do_ls(const char *dir)
+void do_ls(const char *dir, int long_format)
 {
+    DIR *dp;
     struct dirent *entry;
-    DIR *dp = opendir(dir);
+    char path[1024];
+
+    dp = opendir(dir);
     if (dp == NULL)
     {
-        fprintf(stderr, "Cannot open directory : %s\n", dir);
+        perror(dir);
         return;
     }
-    errno = 0;
+
     while ((entry = readdir(dp)) != NULL)
     {
-        if (entry->d_name[0] == '.')
+        // skip "." and ".." if you want
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
-        printf("%s\n", entry->d_name);
-    }
 
-    if (errno != 0)
-    {
-        perror("readdir failed");
+        snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
+
+        if (long_format)
+            print_file_details(path, entry->d_name);
+        else
+            printf("%s\n", entry->d_name);
     }
 
     closedir(dp);
 }
+
