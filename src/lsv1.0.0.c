@@ -21,6 +21,17 @@
 #include <sys/types.h>
 #include <limits.h>
 #include <errno.h>
+// ANSI color codes
+#define COLOR_RESET   "\033[0m"
+#define COLOR_BLUE    "\033[0;34m"
+#define COLOR_GREEN   "\033[0;32m"
+#define COLOR_RED     "\033[0;31m"
+#define COLOR_PINK    "\033[0;35m"
+#define COLOR_REVERSE "\033[7m"
+#include <sys/stat.h>
+
+
+
 // --- Function Prototypes ---
 void do_ls(const char *dir, int long_format, int horizontal);
 void print_file_details(const char *path, const char *name);
@@ -36,6 +47,37 @@ int cmp_names(const void *a, const void *b) {
     const char * const *sa = a;
     const char * const *sb = b;
     return strcmp(*sa, *sb);}
+
+
+void print_colored_name(const char *path, const char *name)
+{
+    struct stat fileStat;
+
+    // Use lstat() to handle symbolic links properly
+    if (lstat(path, &fileStat) == -1)
+    {
+        perror("lstat");
+        printf("%s\n", name);
+        return;
+    }
+
+    const char *color = COLOR_RESET;
+
+    // Determine file type and assign color
+    if (S_ISDIR(fileStat.st_mode))
+        color = COLOR_BLUE;
+    else if (S_ISLNK(fileStat.st_mode))
+        color = COLOR_PINK;
+    else if (S_ISCHR(fileStat.st_mode) || S_ISBLK(fileStat.st_mode) || S_ISSOCK(fileStat.st_mode))
+        color = COLOR_REVERSE;
+    else if (fileStat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+        color = COLOR_GREEN;
+    else if (strstr(name, ".tar") || strstr(name, ".gz") || strstr(name, ".zip"))
+        color = COLOR_RED;
+
+    // Print with color
+    printf("%s%s%s", color, name, COLOR_RESET);
+}
 
 void print_in_columns(const char *dir)
 {
@@ -73,8 +115,12 @@ void print_in_columns(const char *dir)
             int idx = c * rows + r;
             if (idx >= n) continue;
             // if not last column, pad to col_width, else print name only
-            if (c < cols - 1)
-                printf("%-*s", col_width, names[idx]);
+            if (c < cols - 1){
+                char fullpath[1024];
+		snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, names[idx]);
+		print_colored_name(fullpath, names[idx]);
+		printf("%*s", col_width - (int)strlen(names[idx]), "");  // spacing for alignment
+		}
             else
                 printf("%s", names[idx]);
         }
@@ -140,7 +186,10 @@ void print_file_details(const char *path, const char *filename)
     printf(" %s", timebuf);
 
     // Step 7: File name
-    printf(" %s\n", filename);
+print_colored_name(path, filename);
+printf("\n");
+
+
 }
 
 
@@ -364,7 +413,11 @@ void print_horizontal_columns(const char *dir)
             printf("\n");
             current_width = 0;
         }
-        printf("%-*s", col_width, names[i]);
+        char fullpath[1024];
+	snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, names[i]);
+	print_colored_name(fullpath, names[i]);
+	printf("%*s", col_width - (int)strlen(names[i]), "");  // spacing for alignment
+
         current_width += col_width;
     }
     printf("\n");
