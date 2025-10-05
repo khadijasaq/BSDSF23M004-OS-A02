@@ -117,3 +117,63 @@ A simple set of flags (`long_format` and `horizontal`) were used to track which 
 - Else if `-x` is present → horizontal display.  
 - Else → default vertical display.  
 `do_ls()` checks these flags and calls the appropriate function (`print_file_details`, `print_horizontal_columns`, or `print_in_columns`).
+##feature 5
+Report Questions
+
+Q1. Why must all entries be read into memory before sorting?
+To sort the filenames, the program must have all names accessible at once. qsort() operates on an in-memory array, so the entire directory content must first be read into that array.
+A drawback is memory usage — directories containing millions of files could consume large amounts of RAM or cause performance delays, as all names must fit in memory.
+
+Q2. What is the purpose and signature of the comparison function in qsort()?
+qsort() is a generic sorting function that accepts const void * pointers to handle any data type.
+The comparison function defines how two items should be ordered.
+For strings:
+
+int cmp_names(const void *a, const void *b)
+{
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
+
+It casts the void * arguments to char **, then uses strcmp() to compare the strings alphabetically.
+Returning a negative, zero, or positive value tells qsort() the relative order of the two items.
+
+
+
+
+
+
+
+####feature 6
+Report Questions
+
+Q1. How do ANSI escape codes work to produce color in a standard Linux terminal? Show the specific code sequence for printing text in green.
+
+ANSI escape codes are special character sequences interpreted by the terminal to change text color or style.
+They start with the ESC character (\033) followed by a bracketed code (e.g., [0;32m for green).
+
+Example:
+
+printf("\033[0;32mHello World!\033[0m\n");
+
+
+This prints “Hello World!” in green, then resets the color with \033[0m.
+
+Q2. To color an executable file, which bits in st_mode are checked?
+
+To detect executables, the program checks the execute permission bits in the file’s st_mode field:
+
+if (st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+    // file is executable
+
+
+S_IXUSR: Executable by the owner
+
+S_IXGRP: Executable by the group
+
+S_IXOTH: Executable by others
+If any of these bits are set, the file is colored green.
+
+
+---
+
