@@ -33,7 +33,7 @@
 
 
 // --- Function Prototypes ---
-void do_ls(const char *dir, int long_format, int horizontal);
+void do_ls(const char *dir, int long_format, int horizontal, int recursive_flag);
 void print_file_details(const char *path, const char *name);
 void print_in_columns(const char *dir);
 int gather_filenames(const char *dir, char ***names_out, int *maxlen_out);
@@ -198,46 +198,43 @@ int main(int argc, char const *argv[])
     int long_format = 0;
     int horizontal = 0;
     int start_index = 1;
-
+int recursive_flag = 0;
     // Parse command-line options
     for (int i = 1; i < argc; i++)
-    {
-        if (strcmp(argv[i], "-l") == 0)
-        {
-            long_format = 1;
-            start_index = i + 1;
-        }
-        else if (strcmp(argv[i], "-x") == 0)
-        {
-            horizontal = 1;
-            start_index = i + 1;
-        }
-        else
-        {
-            break;  // stop parsing when we hit a directory name
-        }
-    }
+{
+    if (strcmp(argv[i], "-l") == 0)
+        long_format = 1;
+    else if (strcmp(argv[i], "-x") == 0)
+        horizontal = 1;
+    else if (strcmp(argv[i], "-R") == 0)
+        recursive_flag = 1;
+    else
+        break;
+    start_index = i + 1;
+}
+
+     
 
     // Handle cases with or without directory arguments
     if (argc == 1 || start_index == argc)
+{
+    do_ls(".", long_format, horizontal, recursive_flag);
+}
+else
+{
+    for (int i = start_index; i < argc; i++)
     {
-        do_ls(".", long_format, horizontal);
+        do_ls(argv[i], long_format, horizontal, recursive_flag);
     }
-    else
-    {
-        for (int i = start_index; i < argc; i++)
-        {
-            printf("\n%s:\n", argv[i]);
-            do_ls(argv[i], long_format, horizontal);
-        }
-    }
+}
+
 
     return 0;
 }
 
 
 
-void do_ls(const char *dir, int long_format, int horizontal)
+void do_ls(const char *dir, int long_format, int horizontal, int recursive_flag)
 {
     DIR *dp;
     struct dirent *entry;
@@ -250,54 +247,74 @@ void do_ls(const char *dir, int long_format, int horizontal)
         return;
     }
 
+    printf("\n%s:\n", dir);   // print directory header
+
+    // --- Gather all file names ---
+    char **names = NULL;
+    int count = 0, capacity = 0;
+
+    while ((entry = readdir(dp)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        if (count >= capacity)
+        {
+            capacity = capacity == 0 ? 64 : capacity * 2;
+            names = realloc(names, capacity * sizeof(char *));
+        }
+        names[count++] = strdup(entry->d_name);
+    }
+    closedir(dp);
+
+    // --- Sort alphabetically (reuse your comparator) ---
+    qsort(names, count, sizeof(char *), cmp_names);
+
+    // --- Print contents using existing display modes ---
     if (long_format)
     {
-        // --- Gather all file names first ---
-        char **names = NULL;
-        int count = 0, capacity = 0;
-
-        while ((entry = readdir(dp)) != NULL)
-        {
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-                continue;
-
-            if (count >= capacity)
-            {
-                capacity = (capacity == 0) ? 64 : capacity * 2;
-                names = realloc(names, capacity * sizeof(char *));
-            }
-            names[count++] = strdup(entry->d_name);
-        }
-        closedir(dp);
-
-        // --- Sort alphabetically using qsort() ---
-        qsort(names, count, sizeof(char *), cmp_names);
-
-        // --- Print in long listing format ---
         for (int i = 0; i < count; i++)
         {
             snprintf(path, sizeof(path), "%s/%s", dir, names[i]);
             print_file_details(path, names[i]);
         }
-
-        // --- Free memory ---
-        for (int i = 0; i < count; i++)
-            free(names[i]);
-        free(names);
     }
     else if (horizontal)
     {
-        closedir(dp);
-        print_horizontal_columns(dir);   // horizontal mode
-        return;
+        print_horizontal_columns(dir);
     }
     else
     {
-        closedir(dp);
-        print_in_columns(dir);           // default vertical mode
-        return;
+        print_in_columns(dir);
     }
+
+    // --- Recursive part ---
+    if (recursive_flag)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            snprintf(path, sizeof(path), "%s/%s", dir, names[i]);
+
+            struct stat st;
+            if (lstat(path, &st) == 0 && S_ISDIR(st.st_mode))
+            {
+                // skip . and .. just in case
+                if (strcmp(names[i], ".") != 0 && strcmp(names[i], "..") != 0)
+                {
+                    // Recursive call
+                    do_ls(path, long_format, horizontal, recursive_flag);
+                }
+            }
+        }
+    }
+
+    // --- Free memory ---
+    for (int i = 0; i < count; i++)
+        free(names[i]);
+    free(names);
 }
+
+ 
 
 
 // returns number of files, fills *names_out (caller must free each string and the array),

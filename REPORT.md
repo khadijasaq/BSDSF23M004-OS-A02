@@ -176,4 +176,17 @@ If any of these bits are set, the file is colored green.
 
 
 ---
+####FEATURE 7
+Report Questions
 
+Q1. What is a "base case" in recursion, and what is the base case here?
+
+A base case is a condition that stops recursion to prevent infinite calls.
+In this program, the base case occurs when do_ls() opens a directory that contains no subdirectories —
+no further recursive calls are made, and the function returns.
+
+Q2. Why must we construct a full path (e.g., "parent_dir/subdir") before recursive calls?
+
+Because when we descend into a subdirectory, the working directory of the program doesn’t change.
+If we call do_ls("subdir") without including its parent path, it will look for "subdir" in the current working directory instead of inside its parent.
+Using the full path (parent/subdir) ensures we access the correct nested directory.
