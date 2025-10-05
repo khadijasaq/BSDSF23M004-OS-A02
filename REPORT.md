@@ -58,3 +58,23 @@ if (info.st_mode & S_IWUSR)
     printf("Owner has write permission.\n");
 if (info.st_mode & S_IXUSR)
     printf("Owner has execute permission.\n");
+### Feature 3 — Column Display (v1.2.0)
+
+**Summary**
+- Implemented default multi-column output formatted "down then across".
+- Program adapts to terminal width using `ioctl(TIOCGWINSZ)`, sorts filenames alphabetically, and computes rows/columns dynamically.
+
+**Implementation notes**
+- Gather all filenames first into a dynamically allocated `char **` array (using `readdir()` and `strdup()`).
+- Track the length of the longest filename while collecting entries.
+- Sort the array with `qsort()` and `strcmp()` (to match default `ls` ordering).
+- Detect terminal width via `ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)`; fall back to 80 columns if unavailable.
+- Compute:
+  - `col_width = maxlen + spacing`
+  - `cols = max(1, term_width / col_width)` (and `cols ≤ nfiles`)
+  - `rows = ceil(nfiles / cols) = (nfiles + cols - 1) / cols`
+- Print by rows: for each row `r`, print file at index `c * rows + r` for `c` in `[0 .. cols-1]`, padding with `printf("%-*s", col_width, name)` for alignment.
+
+**Tests**
+- Resized terminal and ran `./bin/ls` — output adjusted columns correctly.
+- Verified `./bin/ls -l` still prints long listing (unchanged).
