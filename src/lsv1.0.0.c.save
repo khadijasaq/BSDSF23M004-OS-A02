@@ -1,0 +1,116 @@
+/*
+* Programming Assignment 02: lsv1.0.0
+* This is the source file of version 1.0.0
+* Read the write-up of the assignment to add the features to this base version
+* Usage:
+*       $ lsv1.0.0 
+*       % lsv1.0.0  /home
+*       $ lsv1.0.0  /home/kali/   /etc/
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/stat.h>
+
+extern int errno;
+
+void do_ls(const char *dir, int long_format)
+{
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+    char path[1024];
+
+    if ((dp = opendir(dir)) == NULL)
+    {
+        perror(dir);
+        return;
+    }
+
+    while ((entry = readdir(dp)) != NULL)
+    {
+        sprintf(path, "%s/%s", dir, entry->d_name);
+        if (stat(path, &statbuf) == -1)
+        {
+            perror("stat");
+            continue;
+        }
+
+        if (long_format)
+        {
+            printf( (S_ISDIR(statbuf.st_mode)) ? "d" : "-");
+            printf( (statbuf.st_mode & S_IRUSR) ? "r" : "-");
+            printf( (statbuf.st_mode & S_IWUSR) ? "w" : "-");
+            printf( (statbuf.st_mode & S_IXUSR) ? "x" : "-");
+            printf( (statbuf.st_mode & S_IRGRP) ? "r" : "-");
+            printf( (statbuf.st_mode & S_IWGRP) ? "w" : "-");
+            printf( (statbuf.st_mode & S_IXGRP) ? "x" : "-");
+            printf( (statbuf.st_mode & S_IROTH) ? "r" : "-");
+            printf( (statbuf.st_mode & S_IWOTH) ? "w" : "-");
+            printf( (statbuf.st_mode & S_IXOTH) ? "x" : "-");
+
+            printf(" %5ld", statbuf.st_nlink);
+            printf(" %10ld", statbuf.st_size);
+            printf(" %20s", entry->d_name);
+            printf("\n");
+        }
+        else
+        {
+            printf("%s\n", entry->d_name);
+        }
+    }
+
+    closedir(dp);
+}
+
+int main(int argc, char const *argv[])
+{
+    int long_format = 0;
+
+    // check if "-l" is one of the arguments
+    int start_index = 1;
+    if (argc > 1 && strcmp(argv[1], "-l") == 0) {
+        long_format = 1;
+        start_index = 2;
+    }
+
+    if (argc == 1 || (argc == 2 && long_format)) {
+        do_ls(".", long_format);
+    } else {
+        for (int i = start_index; i < argc; i++) {
+            printf("\n%s:\n", argv[i]);
+            do_ls(argv[i], long_format);
+        }
+    }
+
+    return 0;
+}
+
+
+void do_ls(const char *dir)
+{
+    struct dirent *entry;
+    DIR *dp = opendir(dir);
+    if (dp == NULL)
+    {
+        fprintf(stderr, "Cannot open directory : %s\n", dir);
+        return;
+    }
+    errno = 0;
+    while ((entry = readdir(dp)) != NULL)
+    {
+        if (entry->d_name[0] == '.')
+            continue;
+        printf("%s\n", entry->d_name);
+    }
+
+    if (errno != 0)
+    {
+        perror("readdir failed");
+    }
+
+    closedir(dp);
+}

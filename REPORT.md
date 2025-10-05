@@ -78,3 +78,42 @@ if (info.st_mode & S_IXUSR)
 **Tests**
 - Resized terminal and ran `./bin/ls` — output adjusted columns correctly.
 - Verified `./bin/ls -l` still prints long listing (unchanged).
+### Feature 4 — Horizontal Column Display (-x) (v1.3.0)
+
+**Summary**
+- Added the `-x` flag for horizontal column display (row-major order).
+- Now supports three modes:
+  - Default (down-then-across)
+  - Long listing (-l)
+  - Horizontal (-x)
+
+**Implementation**
+- Updated `main()` to parse the `-x` flag.
+- Added a new function `print_horizontal_columns()` that:
+  - Calculates the maximum filename length.
+  - Determines terminal width with `ioctl(TIOCGWINSZ)`.
+  - Prints filenames left-to-right, wrapping to the next line when needed.
+- Updated `do_ls()` to call the correct function based on the display mode flag.
+
+**Testing**
+- `./bin/ls` → down-then-across (Feature 3 behavior).
+- `./bin/ls -l` → long listing.
+- `./bin/ls -x` → horizontal layout (new feature).
+- Terminal resizing changes column count automatically.
+
+---
+
+
+
+###Featue 4
+### Report Questions
+
+**Q1. Compare the complexity of "down then across" vs. "across" logic.**
+The "down then across" logic requires pre-calculation of both **rows** and **columns**, because items are printed by row index and column stride (r + c × rows). The horizontal "across" logic is simpler: it only needs terminal width and the next item’s length to decide when to wrap. Therefore, the vertical version is more complex because it must compute grid positions before printing.
+
+**Q2. How were display modes managed?**
+A simple set of flags (`long_format` and `horizontal`) were used to track which display mode was chosen.  
+- If `-l` is present → long listing.  
+- Else if `-x` is present → horizontal display.  
+- Else → default vertical display.  
+`do_ls()` checks these flags and calls the appropriate function (`print_file_details`, `print_horizontal_columns`, or `print_in_columns`).

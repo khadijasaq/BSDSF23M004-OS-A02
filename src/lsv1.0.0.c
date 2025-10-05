@@ -22,11 +22,12 @@
 #include <limits.h>
 #include <errno.h>
 // --- Function Prototypes ---
-void do_ls(const char *dir, int long_format);
+void do_ls(const char *dir, int long_format, int horizontal);
 void print_file_details(const char *path, const char *name);
 void print_in_columns(const char *dir);
 int gather_filenames(const char *dir, char ***names_out, int *maxlen_out);
 int cmp_names(const void *a, const void *b);
+void print_horizontal_columns(const char *dir);
 
 
 
@@ -141,38 +142,52 @@ void print_file_details(const char *path, const char *filename)
     // Step 7: File name
     printf(" %s\n", filename);
 }
-void do_ls(const char *dir, int long_format);
 
 
 int main(int argc, char const *argv[])
 {
     int long_format = 0;
+    int horizontal = 0;
     int start_index = 1;
 
-    // check if "-l" was given
-    if (argc > 1 && strcmp(argv[1], "-l") == 0)
+    // Parse command-line options
+    for (int i = 1; i < argc; i++)
     {
-        long_format = 1;
-        start_index = 2;
+        if (strcmp(argv[i], "-l") == 0)
+        {
+            long_format = 1;
+            start_index = i + 1;
+        }
+        else if (strcmp(argv[i], "-x") == 0)
+        {
+            horizontal = 1;
+            start_index = i + 1;
+        }
+        else
+        {
+            break;  // stop parsing when we hit a directory name
+        }
     }
 
-    if (argc == 1 || (argc == 2 && long_format))
+    // Handle cases with or without directory arguments
+    if (argc == 1 || start_index == argc)
     {
-        do_ls(".", long_format);
+        do_ls(".", long_format, horizontal);
     }
     else
     {
         for (int i = start_index; i < argc; i++)
         {
             printf("\n%s:\n", argv[i]);
-            do_ls(argv[i], long_format);
+            do_ls(argv[i], long_format, horizontal);
         }
     }
 
     return 0;
 }
 
-void do_ls(const char *dir, int long_format)
+
+void do_ls(const char *dir, int long_format, int horizontal)
 {
     DIR *dp;
     struct dirent *entry;
@@ -185,7 +200,6 @@ void do_ls(const char *dir, int long_format)
         return;
     }
 
-    // ✅ If -l option is used → show long listing
     if (long_format)
     {
         while ((entry = readdir(dp)) != NULL)
@@ -197,19 +211,21 @@ void do_ls(const char *dir, int long_format)
             print_file_details(path, entry->d_name);
         }
     }
+    else if (horizontal)
+    {
+        closedir(dp);
+        print_horizontal_columns(dir);   // 🆕 new horizontal mode
+        return;
+    }
     else
     {
-        // ✅ Default mode → multi-column display (Feature 3)
-        // We don’t use this dp anymore, because print_in_columns reopens the directory
         closedir(dp);
-        print_in_columns(dir);
+        print_in_columns(dir);           // existing vertical down-then-across
         return;
     }
 
     closedir(dp);
 }
-
-  
 
 // returns number of files, fills *names_out (caller must free each string and the array),
 // and fills *maxlen_out with the longest filename length.
@@ -264,4 +280,73 @@ int gather_filenames(const char *dir, char ***names_out, int *maxlen_out) {
     *names_out = names;
     *maxlen_out = maxlen;
     return count;
+}
+#include <sys/ioctl.h>
+
+void print_horizontal_columns(const char *dir)
+{
+    DIR *dp;
+    struct dirent *entry;
+    char **names = NULL;
+    int capacity = 0, count = 0, maxlen = 0;
+
+    dp = opendir(dir);
+    if (dp == NULL)
+    {
+        perror(dir);
+        return;
+    }
+
+    // 1️⃣ Gather all filenames
+    while ((entry = readdir(dp)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        int len = strlen(entry->d_name);
+        if (len > maxlen)
+            maxlen = len;
+
+        if (count >= capacity)
+        {
+            capacity = (capacity == 0) ? 64 : capacity * 2;
+            names = realloc(names, capacity * sizeof(char *));
+        }
+        names[count] = strdup(entry->d_name);
+        count++;
+    }
+    closedir(dp);
+    if (count == 0) return;
+
+    // 2️⃣ Sort alphabetically
+    qsort(names, count, sizeof(char *), (int (*)(const void *, const void *))strcmp);
+
+    // 3️⃣ Determine terminal width
+    struct winsize ws;
+    int width = 80;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
+        width = ws.ws_col;
+
+    int spacing = 2;
+    int col_width = maxlen + spacing;
+    int current_width = 0;
+
+    // 4️⃣ Print left-to-right horizontally
+    for (int i = 0; i < count; i++)
+    {
+        int next_width = current_width + col_width;
+        if (next_width > width)
+        {
+            printf("\n");
+            current_width = 0;
+        }
+        printf("%-*s", col_width, names[i]);
+        current_width += col_width;
+    }
+    printf("\n");
+
+    // 5️⃣ Free memory
+    for (int i = 0; i < count; i++)
+        free(names[i]);
+    free(names);
 }
