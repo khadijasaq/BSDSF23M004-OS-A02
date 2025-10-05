@@ -187,6 +187,7 @@ int main(int argc, char const *argv[])
 }
 
 
+
 void do_ls(const char *dir, int long_format, int horizontal)
 {
     DIR *dp;
@@ -202,30 +203,53 @@ void do_ls(const char *dir, int long_format, int horizontal)
 
     if (long_format)
     {
+        // --- Gather all file names first ---
+        char **names = NULL;
+        int count = 0, capacity = 0;
+
         while ((entry = readdir(dp)) != NULL)
         {
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                 continue;
 
-            snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
-            print_file_details(path, entry->d_name);
+            if (count >= capacity)
+            {
+                capacity = (capacity == 0) ? 64 : capacity * 2;
+                names = realloc(names, capacity * sizeof(char *));
+            }
+            names[count++] = strdup(entry->d_name);
         }
+        closedir(dp);
+
+        // --- Sort alphabetically using qsort() ---
+        qsort(names, count, sizeof(char *), cmp_names);
+
+        // --- Print in long listing format ---
+        for (int i = 0; i < count; i++)
+        {
+            snprintf(path, sizeof(path), "%s/%s", dir, names[i]);
+            print_file_details(path, names[i]);
+        }
+
+        // --- Free memory ---
+        for (int i = 0; i < count; i++)
+            free(names[i]);
+        free(names);
     }
     else if (horizontal)
     {
         closedir(dp);
-        print_horizontal_columns(dir);   // 🆕 new horizontal mode
+        print_horizontal_columns(dir);   // horizontal mode
         return;
     }
     else
     {
         closedir(dp);
-        print_in_columns(dir);           // existing vertical down-then-across
+        print_in_columns(dir);           // default vertical mode
         return;
     }
-
-    closedir(dp);
 }
+
 
 // returns number of files, fills *names_out (caller must free each string and the array),
 // and fills *maxlen_out with the longest filename length.
